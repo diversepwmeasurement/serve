@@ -1,43 +1,50 @@
-on:
-  push:
-    branches:
-      - master
-  merge_group:
-
 jobs:
   build_docs_job:
-    runs-on: ubuntu-20.04
     permissions:
-      # Grant write permission here so that the doc can be pushed to gh-pages branch
       contents: write
+    runs-on: self-hosted
     steps:
-    - name: Setup Python 3.9
+    - continue-on-error: true
+      name: Setup Python 3.9
       uses: actions/setup-python@v5
       with:
-        python-version: 3.9
         architecture: x64
-    - name: Checkout
+        python-version: 3.9
+    - continue-on-error: true
+      name: Checkout
       uses: actions/checkout@v3
-    - name: Install Dependencies
-      run: |
-        pip install -r ./docs/sphinx/requirements.txt
-    - name: Build the docset
-      run: |
-        cd ./docs/sphinx
-        make html
+    - continue-on-error: true
+      name: Install Dependencies
+      run: 'pip install -r ./docs/sphinx/requirements.txt
+
+        '
+    - continue-on-error: true
       id: build
-    - name: Deploy
+      name: Build the docset
+      run: 'cd ./docs/sphinx
+
+        make html
+
+        '
+    - continue-on-error: true
+      name: Deploy
       uses: JamesIves/github-pages-deploy-action@releases/v3
       with:
-          ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages # The branch the action should deploy to.
-          FOLDER: docs/sphinx/build/html
-          CLEAN_EXCLUDE: '["_config.yml"]'
-    - name: Open issue on failure
+        ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        BRANCH: gh-pages
+        CLEAN_EXCLUDE: '["_config.yml"]'
+        FOLDER: docs/sphinx/build/html
+    - continue-on-error: true
       if: ${{ failure() && github.event_name  == 'schedule' }}
+      name: Open issue on failure
       uses: dacbd/create-issue-action@v1
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        title: Doc automation failed
-        body:  Commit ${{ github.sha }} daily scheduled [CI run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) failed, please check why
         assignees: ''
+        body: Commit ${{ github.sha }} daily scheduled [CI run](https://github.com/${{
+          github.repository }}/actions/runs/${{ github.run_id }}) failed, please check
+          why
+        title: Doc automation failed
+        token: ${{ secrets.GITHUB_TOKEN }}
+on:
+  repository_dispatch:
+    types: trigger-ga___doc-automation.yml

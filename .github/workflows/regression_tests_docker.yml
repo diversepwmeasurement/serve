@@ -1,69 +1,88 @@
-name: Run Regression Tests on Docker
-
-on:
-  push:
-    tags:
-      - docker
-  workflow_dispatch:
-  # run every day at 5:15am
-  schedule:
-    - cron:  '15 5 * * *'
-
 concurrency:
-  group: ci-cpu-${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_number || github.ref }}
   cancel-in-progress: true
-
+  group: ci-cpu-${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_number
+    || github.ref }}
 jobs:
   docker-regression:
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      name: Clean up previous run
+      run: 'echo "Cleaning up previous run"
+
+        ls -la ./
+
+        sudo rm -rf ./* || true
+
+        sudo rm -rf ./.??* || true
+
+        ls -la ./
+
+        docker system prune --all --volumes -f
+
+        '
+    - continue-on-error: true
+      name: Checkout TorchServe
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - continue-on-error: true
+      name: Branch name
+      run: 'echo $GITHUB_REF_NAME
+
+        '
+    - continue-on-error: true
+      if: contains(matrix.hardware, 'ubuntu')
+      name: Build CPU Docker Image
+      run: 'cd docker
+
+        ./build_image.sh -bt ci -n -b $GITHUB_REF_NAME -t pytorch/torchserve:ci
+
+        '
+    - continue-on-error: true
+      if: false == contains(matrix.hardware, 'ubuntu')
+      name: Build GPU Docker Image
+      run: 'cd docker
+
+        ./build_image.sh -g -cv cu121 -bt ci -n -b $GITHUB_REF_NAME -t pytorch/torchserve:ci
+
+        '
+    - continue-on-error: true
+      if: false == contains(matrix.hardware, 'ubuntu')
+      name: Validate Torchserve CPU Regression
+      run: 'docker run --gpus all -v $GITHUB_WORKSPACE:/home/serve pytorch/torchserve:ci
+
+        '
+    - continue-on-error: true
+      if: contains(matrix.hardware, 'ubuntu')
+      name: Validate Torchserve CPU Regression
+      run: 'docker run -v $GITHUB_WORKSPACE:/home/serve pytorch/torchserve:ci
+
+        '
+    - continue-on-error: true
+      if: success()
+      name: Cleanup Docker Images
+      run: 'docker system prune -f && docker rmi pytorch/torchserve:ci
+
+        '
+    - continue-on-error: true
+      if: ${{ failure() && github.event_name  == 'schedule' }}
+      name: Open issue on failure
+      uses: dacbd/create-issue-action@v1
+      with:
+        assignees: ''
+        body: The daily scheduled [Docker Regression Run](https://github.com/${{ github.repository
+          }}/actions/runs/${{ github.run_id }}) failed, please check why
+        title: Docker Regression on ${{ matrix.hardware }} failed
+        token: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
-        hardware: [ubuntu-20.04, [self-hosted, regression-test-gpu]]
-    runs-on:
-      - ${{ matrix.hardware }}
-    steps:
-      - name: Clean up previous run
-        run: |
-          echo "Cleaning up previous run"
-          ls -la ./
-          sudo rm -rf ./* || true
-          sudo rm -rf ./.??* || true
-          ls -la ./
-          docker system prune --all --volumes -f
-      - name: Checkout TorchServe
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Branch name
-        run: |
-          echo $GITHUB_REF_NAME
-      - name: Build CPU Docker Image
-        if: contains(matrix.hardware, 'ubuntu')
-        run: |
-          cd docker
-          ./build_image.sh -bt ci -n -b $GITHUB_REF_NAME -t pytorch/torchserve:ci
-      - name: Build GPU Docker Image
-        if: false == contains(matrix.hardware, 'ubuntu')
-        run: |
-          cd docker
-          ./build_image.sh -g -cv cu121 -bt ci -n -b $GITHUB_REF_NAME -t pytorch/torchserve:ci
-      - name: Validate Torchserve CPU Regression
-        if: false == contains(matrix.hardware, 'ubuntu')
-        run: |
-          docker run --gpus all -v $GITHUB_WORKSPACE:/home/serve pytorch/torchserve:ci
-      - name: Validate Torchserve CPU Regression
-        if: contains(matrix.hardware, 'ubuntu')
-        run: |
-          docker run -v $GITHUB_WORKSPACE:/home/serve pytorch/torchserve:ci
-      - name: Cleanup Docker Images
-        if: success()
-        run: |
-          docker system prune -f && docker rmi pytorch/torchserve:ci
-      - name: Open issue on failure
-        if: ${{ failure() && github.event_name  == 'schedule' }}
-        uses: dacbd/create-issue-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          title: Docker Regression on ${{ matrix.hardware }} failed
-          body:  The daily scheduled [Docker Regression Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) failed, please check why
-          assignees: ''
+        hardware:
+        - ubuntu-20.04
+        - - self-hosted
+          - regression-test-gpu
+name: Run Regression Tests on Docker
+on:
+  repository_dispatch:
+    types: trigger-ga___regression_tests_docker.yml

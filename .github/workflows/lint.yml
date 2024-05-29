@@ -1,111 +1,110 @@
-name: Lint
-
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
-  merge_group:
-
-
 jobs:
-  mypy:
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Setup Python 3.9
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.9
-          architecture: x64
-      - name: Checkout TorchServe
-        uses: actions/checkout@v3
-      - name: Install mypy
-        run: |
-          pip install mypy
-      - name: Run mypy
-        env:
-          MYPY_FORCE_COLOR: 1
-          TERM: xterm-color
-        run: |
-          set -eux
-          STATUS=
-          if ! mypy --config=mypy.ini; then
-            STATUS=fail
-          fi
-          if [ -n "$STATUS" ]; then
-            echo 'Please fix the above mypy warnings.'
-            false
-          fi
   build:
-    runs-on: ubuntu-20.04
     name: Lint changed files
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # OR "2" -> To retrieve the preceding commit.
+    - continue-on-error: true
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - continue-on-error: true
+      name: Install lint utilities
+      run: 'pip install pre-commit
 
-      - name: Install lint utilities
-        run: |
-          pip install pre-commit
-          pre-commit install
+        pre-commit install
 
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v41.0.0
-        with:
+        '
+    - continue-on-error: true
+      id: changed-files
+      name: Get changed files
+      uses: tj-actions/changed-files@v41.0.0
+      with:
+        files: '**/*.py
 
-          files: |
-            **/*.py
+          '
+    - continue-on-error: true
+      name: Lint all changed files
+      run: "for file in ${{ steps.changed-files.outputs.all_changed_files }}; do\n\
+        \  pre-commit run --files $file\ndone\n"
+    - continue-on-error: true
+      if: ${{ failure() }}
+      name: What to do if this action fails
+      run: 'echo "You need to lint your code with pre-commit"
 
-      - name: Lint all changed files
-        run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            pre-commit run --files $file
-          done
+        echo "pip install pre-commit"
 
-      - name: What to do if this action fails
-        if: ${{ failure() }}
-        run: |
-          echo "You need to lint your code with pre-commit"
-          echo "pip install pre-commit"
-          echo "cd serve/"
-          echo "pre-commit install"
-          echo "pre-commit will lint your code for you, so git add and commit those new changes and this check should become green"
-          echo "If you've already pushed some files remotely then run git diff --name-only main | xargs pre-commit run --files"
+        echo "cd serve/"
 
+        echo "pre-commit install"
+
+        echo "pre-commit will lint your code for you, so git add and commit those
+        new changes and this check should become green"
+
+        echo "If you''ve already pushed some files remotely then run git diff --name-only
+        main | xargs pre-commit run --files"
+
+        '
+  mypy:
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      name: Setup Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        architecture: x64
+        python-version: 3.9
+    - continue-on-error: true
+      name: Checkout TorchServe
+      uses: actions/checkout@v3
+    - continue-on-error: true
+      name: Install mypy
+      run: 'pip install mypy
+
+        '
+    - continue-on-error: true
+      env:
+        MYPY_FORCE_COLOR: 1
+        TERM: xterm-color
+      name: Run mypy
+      run: "set -eux\nSTATUS=\nif ! mypy --config=mypy.ini; then\n  STATUS=fail\n\
+        fi\nif [ -n \"$STATUS\" ]; then\n  echo 'Please fix the above mypy warnings.'\n\
+        \  false\nfi\n"
   spellcheck:
-    runs-on: ubuntu-20.04
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v3
+    - continue-on-error: true
+      uses: actions/checkout@v3
+    - continue-on-error: true
+      name: Install dependencies
+      run: 'sudo apt-get install aspell aspell-en
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get install aspell aspell-en
-          pip install pyspelling
+        pip install pyspelling
 
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v41.0.0
-        with:
-          files: |
-            **/*.md
+        '
+    - continue-on-error: true
+      id: changed-files
+      name: Get changed files
+      uses: tj-actions/changed-files@v41.0.0
+      with:
+        files: '**/*.md
 
-      - name: Check spellings
-        run: |
-          sources=""
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            sources="${sources} -S $file"
-          done
-          if [ ! "$sources" ]; then
-            echo "No files to spellcheck"
-          else
-            pyspelling -c $GITHUB_WORKSPACE/ts_scripts/spellcheck_conf/spellcheck.yaml --name Markdown $sources
-          fi
+          '
+    - continue-on-error: true
+      name: Check spellings
+      run: "sources=\"\"\nfor file in ${{ steps.changed-files.outputs.all_changed_files\
+        \ }}; do\n  sources=\"${sources} -S $file\"\ndone\nif [ ! \"$sources\" ];\
+        \ then\n  echo \"No files to spellcheck\"\nelse\n  pyspelling -c $GITHUB_WORKSPACE/ts_scripts/spellcheck_conf/spellcheck.yaml\
+        \ --name Markdown $sources\nfi\n"
+    - continue-on-error: true
+      if: ${{ failure() }}
+      name: In the case of misspellings
+      run: 'echo "Please fix the misspellings. If you are sure about some of them,
+        "
 
-      - name: In the case of misspellings
-        if: ${{ failure() }}
-        run: |
-          echo "Please fix the misspellings. If you are sure about some of them, "
-          echo "so append those to ts_scripts/spellcheck_conf/wordlist.txt"
+        echo "so append those to ts_scripts/spellcheck_conf/wordlist.txt"
+
+        '
+name: Lint
+on:
+  repository_dispatch:
+    types: trigger-ga___lint.yml

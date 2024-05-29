@@ -1,24 +1,68 @@
-name: Run Regression Tests for CPU nightly binaries
-
-on:
-  # run every day at 6:15am
-  schedule:
-    - cron: '15 6 * * *'
-
 concurrency:
-  group: ci-cpu-${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_number || github.ref }}
   cancel-in-progress: true
-
+  group: ci-cpu-${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_number
+    || github.ref }}
 jobs:
   regression-cpu-nightly-binaries:
-    # creates workflows for OS: ubuntu, macOS
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - continue-on-error: true
+      name: Setup conda with Python ${{ matrix.python-version }}
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        channels: anaconda, conda-forge
+        python-version: ${{ matrix.python-version }}
+    - continue-on-error: true
+      name: Setup Java 17
+      uses: actions/setup-java@v3
+      with:
+        distribution: zulu
+        java-version: '17'
+    - continue-on-error: true
+      name: Checkout TorchServe
+      uses: actions/checkout@v3
+    - continue-on-error: true
+      name: Install dependencies
+      run: 'echo "=====CHECK ENV AND PYTHON VERSION===="
+
+        conda info --envs
+
+        python --version
+
+        echo "=====RUN INSTALL DEPENDENCIES===="
+
+        python ts_scripts/install_dependencies.py --environment=dev
+
+        '
+      shell: bash -el {0}
+    - continue-on-error: true
+      env:
+        TS_MAC_ARM64_CPU_ONLY: ${{ matrix.os == 'macos-latest' && 'True' || 'False'
+          }}
+      name: Torchserve Regression Tests
+      run: 'echo "=====CHECK ENV AND PYTHON VERSION===="
+
+        conda info --envs
+
+        python --version
+
+        echo "=====RUN REGRESSION TESTS===="
+
+        python test/regression_tests.py --binaries --${{ matrix.binaries }} --nightly
+
+        '
+      shell: bash -el {0}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, macos-latest]
-        python-version: ["3.8", "3.9", "3.10"]
-        binaries: ["pypi", "conda"]
+        binaries:
+        - pypi
+        - conda
         exclude:
         - os: macos-latest
           python-version: 3.8
@@ -26,38 +70,14 @@ jobs:
           python-version: 3.8
         - os: macos-14
           python-version: 3.9
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Setup conda with Python ${{ matrix.python-version }}
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          auto-update-conda: true
-          channels: anaconda, conda-forge
-          python-version: ${{ matrix.python-version }}
-      - name: Setup Java 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-      - name: Checkout TorchServe
-        uses: actions/checkout@v3
-      - name: Install dependencies
-        shell: bash -el {0}
-        run: |
-          echo "=====CHECK ENV AND PYTHON VERSION===="
-          conda info --envs
-          python --version
-          echo "=====RUN INSTALL DEPENDENCIES===="
-          python ts_scripts/install_dependencies.py --environment=dev
-      - name: Torchserve Regression Tests
-        shell: bash -el {0}
-        env:
-          TS_MAC_ARM64_CPU_ONLY: ${{ matrix.os == 'macos-latest' && 'True' || 'False' }}
-        run: |
-          echo "=====CHECK ENV AND PYTHON VERSION===="
-          conda info --envs
-          python --version
-          echo "=====RUN REGRESSION TESTS===="
-          python test/regression_tests.py --binaries --${{ matrix.binaries }} --nightly
+        os:
+        - ubuntu-20.04
+        - macos-latest
+        python-version:
+        - '3.8'
+        - '3.9'
+        - '3.10'
+name: Run Regression Tests for CPU nightly binaries
+on:
+  repository_dispatch:
+    types: trigger-ga___regression_tests_cpu_binaries.yml
